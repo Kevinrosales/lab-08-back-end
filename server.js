@@ -75,10 +75,8 @@ Location.fetchLocation = (query) => {
   });
 };
 
-// app.get('/location', (request, response, next) => {
-//   getLocation(request.query.data)
- 
-// });
+app.get('/location', getLocation);
+
 
 function getLocation(request, response) {
   const locationHandler = {
@@ -121,19 +119,19 @@ app.get('/movies', getMovies);
 
 // Define event handlers
 
-function getLocation(query) {
-  const _URL = `https://maps.googleapis.com/maps/api/geocode/json?address=${query}&key=${process.env.GEOCODE_API_KEY}`;
-  return superagent.get(_URL)
-    .then(data => {
-      if (! data.body.results.length) {throw 'No data'}
-      else {
-        let location = new Location(data.body.results[0]);
-        location.search_query = query;
-        console.log(location);
-        return location;
-      }
-    });
-}
+// function getLocation(query, ) {
+//   const _URL = `https://maps.googleapis.com/maps/api/geocode/json?address=${query}&key=${process.env.GEOCODE_API_KEY}`;
+//   return superagent.get(_URL)
+//     .then(data => {
+//       if (! data.body.results.length) {throw 'No data'}
+//       else {
+//         let location = new Location(data.body.results[0]);
+//         location.search_query = query;
+//         console.log(location);
+//         return location;
+//       }
+//     });
+// }
 
 function handleError(err, res) {
   console.error('ERR', err);
