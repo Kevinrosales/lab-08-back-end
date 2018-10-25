@@ -102,6 +102,68 @@ function Yelp(business) {
   this.url = business.url;
 }
 
+Yelp.prototype.save = function(id) {
+  const SQL = `INSERT INTO yelps (name, image_url, price, rating, url) VALUES ($1, $2, $3, $4, $5);`;
+  const values = Object.values(this);
+  values.push(id);
+  client.query(SQL, values);
+};
+
+Yelp.lookup = function(handler) {
+  const SQL = `SELECT * FROM yelps WHERE location_id=$1;`;
+  client.query(SQL, [handler.location.id])
+    .then(result => {
+      if (result.rowCount > 0) {
+        console.log('Got yelp data from SQL');
+        handler.cacheHit(result);
+      }
+      else {
+        console.log('Got yelp data from API');
+        handler.cacheMiss();
+      }
+    })
+    .catch(error => handleError(error));
+};
+
+Yelp.fetch = function(query) {
+  console.log('query=', query);
+  const _URL = `https://api.yelp.com/v3/businesses/search?latitude=${query.latitude}&longitude=${query.longitude}`;
+
+  return superagent.get(_URL)
+  .set({'Authorization': `Bearer ${process.env.YELP_API_KEY}`})
+    .then(result => {
+      const businesses = [];
+      result.body.businesses.forEach(biz => {
+        let business = new Yelp(biz);
+        businesses.push(business);
+        business.save(query.id);
+
+      })
+      // response.send(businesses);
+      return businesses;
+    })
+    .catch(error => handleError(error ,response));
+};
+
+function getYelp(request, response) {
+  const handler = {
+    location: request.query.data,
+    cacheHit: function(result) {
+      console.log('Got Yelp data from SQL');
+      response.send(result.rows);
+    },
+    cacheMiss: function() {
+      console.log('Got Yelp data from API');
+      Yelp.fetch(request.query.data)
+        .then(results => response.send(results))
+        .catch(console.error);
+    }
+  };
+  Yelp.lookup(handler);
+};
+
+
+
 function Movie(movie) {
   this.title = movie.title;
   this.overview = movie.overview;
@@ -172,49 +234,21 @@ app.get('/movies', getMovies);
 
 // Define event handlers
 
-// function getLocation(query, ) {
-//   const _URL = `https://maps.googleapis.com/maps/api/geocode/json?address=${query}&key=${process.env.GEOCODE_API_KEY}`;
-//   return superagent.get(_URL)
-//     .then(data => {
-//       if (! data.body.results.length) {throw 'No data'}
-//       else {
-//         let location = new Location(data.body.results[0]);
-//         location.search_query = query;
-//         console.log(location);
-//         return location;
-//       }
-//     });
-// }
-
 function handleError(err, res) {
   console.error('ERR', err);
   if (res) res.status(500).send('Sorry, something went wrong.');
 }
 
-function getYelp(request, response) {
-  const _URL = `https://api.yelp.com/v3/businesses/search?latitude=${request.query.data.latitude}&longitude=${request.query.data.longitude}`;
-  return superagent.get(_URL)
-    .set({'Authorization': `Bearer ${process.env.YELP_API_KEY}`})
-    .then(result => {
-      const businesses = [];
-      result.body.businesses.forEach(biz => {
-        businesses.push(new Yelp(biz));
-      })
-      response.send(businesses);
-    })
-    .catch(error => handleError(error ,response));
-}
-
-// function getWeather(request, response) {
-//   const _URL = `https://api.darksky.net/forecast/${process.env.WEATHER_API_KEY}/${request.query.data.latitude},${request.query.data.longitude}`;
+// function getYelp(request, response) {
+//   const _URL = `https://api.yelp.com/v3/businesses/search?latitude=${request.query.data.latitude}&longitude=${request.query.data.longitude}`;
 //   return superagent.get(_URL)
+//     .set({'Authorization': `Bearer ${process.env.YELP_API_KEY}`})
 //     .then(result => {
-//       const weatherSummaries = [];
-//       result.body.daily.data.forEach(day => {
-//         const summary = new Weather(day);
-//         weatherSummaries.push(summary);
-//       });
-//       response.send(weatherSummaries);
+//       const businesses = [];
+//       result.body.businesses.forEach(biz => {
+//         businesses.push(new Yelp(biz));
+//       })
+//       response.send(businesses);
 //     })
 //     .catch(error => handleError(error ,response));
 // }
