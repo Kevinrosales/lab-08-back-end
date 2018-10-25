@@ -4,10 +4,15 @@
 const express = require('express');
 const cors = require('cors');
 const superagent = require('superagent');
+const pg = require('pg');
 
 require('dotenv').config();
 
 const PORT = process.env.PORT;
+
+const client = new pg.Client(process.env.DATABASE_URL);
+client.connect();
+client.on('err', err => console.log(err));
 
 const app = express();
 
@@ -17,9 +22,19 @@ app.listen(PORT, () => console.log(`App is up on ${PORT}`));
 
 // Define objects
 function Location(data) {
+  this.search_query = query;
   this.formatted_query = data.formatted_address;
   this.latitude = data.geometry.location.lat;
   this.longitude = data.geometry.location.lng;
+}
+
+Location.prototype.save = function() {
+  let SQL = `
+    INSERT INTO locations
+    (search_query,formatted_query,latitude,longitude)
+    VALUES($1,$2,$3,$4)`;
+  let values = Object.values(this);
+  client.query(SQL,values);
 }
 
 function Weather(day) {
@@ -46,13 +61,57 @@ function Movie(movie) {
 }
 
 // Call event listeners
+Location.fetchLocation = (query) => {
+  const _URL = `https://maps.googleapis.com/maps/api/geocode/json?address=${query}&key=${process.env.GEOCODE_API_KEY}`;
+  return superagent.get(_URL)
+  .then( data => {
+    console.log('Got data from API');
+    if ( ! data.body.results.length ) { throw 'No Data'; }
+    else {
+      let location = new Location(query, data.body.results[0]);
+      location.save();
+      return location;
+    }
+  });
+};
 
-app.get('/location', (request, response, next) => {
-  getLocation(request.query.data)
-    .then(locationData => response.send(locationData))
-    .catch(error => handleError(error, response));
+// app.get('/location', (request, response, next) => {
+//   getLocation(request.query.data)
+ 
+// });
 
-});
+function getLocation(request, response) {
+  const locationHandler = {
+    query: request.query.data,
+
+    cacheHit: (results) => {
+      console.log('Got data from SQL');
+      response.send(results.rows[0]);
+    },
+    cacheMiss: () => {
+      Location.fetchLocation(request.query.data)
+      .then(data => response.send(data));
+    }
+  };
+    Location.lookupLocation(locationHandler);
+}
+
+Location.lookupLocation = (handler) => {
+
+  const SQL = `SELECT * FROM locations WHERE search_query=$1`;
+  const values = [handler.query];
+
+  return client.query( SQL, values )
+  .then( results => {
+    if( results.rowCount > 0 ) {
+      handler.cacheHit(results);
+    }
+    else {
+      handler.cacheMiss();
+    }
+  })
+  .catch( console.error );
+};
 
 app.get('/weather', getWeather);
 
